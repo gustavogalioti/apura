@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APURA — IR Renda Variável</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root {
+  --bg: #111827;
+  --surface: #1a2336;
+  --surface2: #1f2a40;
+  --surface3: #243048;
+  --border: #2a3a55;
+  --border2: #324460;
+  --gold: #d4a843;
+  --gold2: #f0c96a;
+  --gold-dim: rgba(212,168,67,0.12);
+  --green: #2dd4a0;
+  --green-dim: rgba(45,212,160,0.1);
+  --red: #f05555;
+  --red-dim: rgba(240,85,85,0.1);
+  --blue: #5b8af5;
+  --text: #e2e4f0;
+  --text2: #9a9db8;
+  --text3: #5a5d78;
+  --mono: 'JetBrains Mono', monospace;
+  --body: 'Outfit', sans-serif;
+  --display: 'Syne', sans-serif;
+  --radius: 6px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--body); min-height: 100vh; font-size: 14px; }
+body::after { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E"); pointer-events:none; z-index:1000; opacity:0.4; }
+
+/* ── AUTH SCREENS ── */
+.auth-screen { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:500; flex-direction:column; }
+.auth-card { background:var(--surface); border:1px solid var(--border2); border-radius:12px; padding:48px 40px; width:100%; max-width:420px; position:relative; overflow:hidden; }
+.auth-card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); }
+.auth-logo { font-family:var(--display); font-size:36px; font-weight:800; letter-spacing:-1px; margin-bottom:4px; background:linear-gradient(135deg,var(--gold2),var(--gold)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.auth-sub { font-size:12px; color:var(--text3); font-family:var(--mono); margin-bottom:32px; letter-spacing:1px; }
+.auth-tabs { display:flex; gap:2px; background:var(--bg); border-radius:6px; padding:3px; margin-bottom:28px; }
+.auth-tab { flex:1; padding:9px; background:transparent; border:none; color:var(--text3); font-family:var(--display); font-size:13px; font-weight:600; cursor:pointer; border-radius:4px; transition:all 0.2s; }
+.auth-tab.active { background:var(--surface2); color:var(--gold); }
+.auth-field { margin-bottom:14px; }
+.auth-field label { display:block; font-size:10px; color:var(--text3); font-family:var(--mono); margin-bottom:6px; letter-spacing:1px; text-transform:uppercase; }
+.auth-field input { width:100%; background:var(--bg); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:var(--mono); font-size:14px; padding:12px 14px; outline:none; transition:border-color 0.2s; }
+.auth-field input:focus { border-color:var(--gold); }
+.auth-btn { width:100%; padding:13px; background:var(--gold); border:none; border-radius:var(--radius); color:#07080f; font-family:var(--display); font-size:14px; font-weight:700; letter-spacing:0.5px; cursor:pointer; margin-top:6px; transition:all 0.2s; }
+.auth-btn:hover { background:var(--gold2); transform:translateY(-1px); }
+.auth-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
+.auth-msg { font-size:12px; margin-top:12px; text-align:center; font-family:var(--mono); padding:10px; border-radius:4px; display:none; }
+.auth-msg.error { color:var(--red); background:var(--red-dim); border:1px solid rgba(240,85,85,0.2); }
+.auth-msg.success { color:var(--green); background:var(--green-dim); border:1px solid rgba(45,212,160,0.2); }
+.auth-link { text-align:center; margin-top:16px; font-size:12px; color:var(--text3); font-family:var(--mono); }
+.auth-link span { color:var(--gold); cursor:pointer; }
+.auth-link span:hover { text-decoration:underline; }
+
+/* ── APP ── */
+#app { display:none; min-height:100vh; }
+.layout { display:grid; grid-template-columns:220px 1fr; min-height:100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar { background:var(--surface); border-right:1px solid var(--border); padding:28px 0; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; }
+.sidebar-logo { padding:0 24px 28px; border-bottom:1px solid var(--border); margin-bottom:20px; }
+.sidebar-logo h1 { font-family:var(--display); font-size:22px; font-weight:800; background:linear-gradient(135deg,var(--gold2),var(--gold)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.5px; }
+.sidebar-logo p { font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:3px; letter-spacing:1px; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:10px 24px; cursor:pointer; font-size:13px; font-weight:500; color:var(--text2); transition:all 0.15s; border-left:2px solid transparent; margin:1px 0; }
+.nav-item:hover { color:var(--text); background:var(--surface2); }
+.nav-item.active { color:var(--gold); border-left-color:var(--gold); background:var(--gold-dim); }
+.nav-icon { font-size:15px; width:20px; text-align:center; }
+.sidebar-bottom { margin-top:auto; padding:20px 24px 0; border-top:1px solid var(--border); }
+.user-badge { display:flex; align-items:center; gap:10px; }
+.user-avatar { width:32px; height:32px; border-radius:50%; background:var(--gold-dim); border:1px solid var(--gold); display:flex; align-items:center; justify-content:center; font-family:var(--display); font-size:13px; font-weight:700; color:var(--gold); }
+.user-info p:first-child { font-size:12px; font-weight:600; }
+.user-info p:last-child { font-size:10px; color:var(--text3); font-family:var(--mono); }
+.logout-btn { background:none; border:none; color:var(--text3); font-size:11px; cursor:pointer; margin-top:10px; font-family:var(--mono); padding:0; }
+.logout-btn:hover { color:var(--red); }
+
+/* ── MAIN ── */
+.main { padding:36px 40px; overflow-y:auto; }
+.page { display:none; animation:fadeUp 0.25s ease; }
+.page.active { display:block; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.page-header { margin-bottom:28px; }
+.page-title { font-family:var(--display); font-size:24px; font-weight:800; letter-spacing:-0.5px; }
+.page-sub { font-size:13px; color:var(--text2); margin-top:4px; }
+
+/* ── CARDS ── */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:20px; }
+.card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.card-title { font-family:var(--mono); font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--text3); display:flex; align-items:center; gap:8px; }
+.card-title::before { content:'//'; color:var(--gold); }
+
+/* ── STATS ── */
+.stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:24px; }
+.stat { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; position:relative; overflow:hidden; }
+.stat::after { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.stat.gold::after { background:var(--gold); }
+.stat.green::after { background:var(--green); }
+.stat.red::after { background:var(--red); }
+.stat.blue::after { background:var(--blue); }
+.stat-label { font-family:var(--mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text3); margin-bottom:10px; }
+.stat-value { font-family:var(--display); font-size:20px; font-weight:700; }
+.stat-value.c-gold { color:var(--gold); }
+.stat-value.c-green { color:var(--green); }
+.stat-value.c-red { color:var(--red); }
+.stat-value.c-blue { color:var(--blue); }
+
+/* ── FORMS ── */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+.grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+.grid-5 { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
+.field { display:flex; flex-direction:column; gap:6px; }
+.field label { font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text3); }
+input, select, textarea { background:var(--bg); border:1px solid var(--border2); border-radius:4px; color:var(--text); font-family:var(--mono); font-size:13px; padding:10px 12px; outline:none; transition:border-color 0.2s; width:100%; }
+input:focus, select:focus, textarea:focus { border-color:var(--gold); }
+select option { background:var(--surface2); }
+textarea { resize:vertical; min-height:100px; font-size:12px; line-height:1.6; }
+
+/* ── BUTTONS ── */
+.btn { padding:10px 20px; border-radius:4px; font-family:var(--display); font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; display:inline-flex; align-items:center; gap:7px; letter-spacing:0.3px; }
+.btn-gold { background:var(--gold); color:#07080f; }
+.btn-gold:hover { background:var(--gold2); transform:translateY(-1px); }
+.btn-gold:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border2); }
+.btn-ghost:hover { color:var(--text); border-color:var(--text3); }
+.btn-red { background:var(--red-dim); color:var(--red); border:1px solid rgba(240,85,85,0.2); padding:6px 10px; font-size:11px; }
+.btn-red:hover { background:rgba(240,85,85,0.2); }
+.btn-green { background:var(--green-dim); color:var(--green); border:1px solid rgba(45,212,160,0.2); }
+.btn-green:hover { background:rgba(45,212,160,0.2); }
+.btn-sm { padding:7px 14px; font-size:12px; }
+.flex-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.flex-end { justify-content:flex-end; }
+
+/* ── TABLE ── */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { font-family:var(--mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text3); padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+td { padding:10px 12px; border-bottom:1px solid rgba(30,32,53,0.6); font-family:var(--mono); font-size:12px; vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(212,168,67,0.02); }
+
+/* ── TAGS ── */
+.tag { font-family:var(--mono); font-size:9px; padding:3px 8px; border-radius:3px; letter-spacing:0.5px; text-transform:uppercase; font-weight:600; }
+.tag-acao { background:rgba(212,168,67,0.12); color:var(--gold); border:1px solid rgba(212,168,67,0.2); }
+.tag-fii  { background:rgba(45,212,160,0.1); color:var(--green); border:1px solid rgba(45,212,160,0.2); }
+.tag-etf  { background:rgba(91,138,245,0.1); color:var(--blue); border:1px solid rgba(91,138,245,0.2); }
+.tag-opcao{ background:rgba(240,85,85,0.1); color:var(--red); border:1px solid rgba(240,85,85,0.2); }
+.tag-swing{ background:rgba(255,255,255,0.04); color:var(--text2); border:1px solid var(--border); }
+.tag-day  { background:rgba(91,138,245,0.1); color:var(--blue); border:1px solid rgba(91,138,245,0.2); }
+.tag-c    { background:var(--green-dim); color:var(--green); border:1px solid rgba(45,212,160,0.2); }
+.tag-v    { background:var(--red-dim); color:var(--red); border:1px solid rgba(240,85,85,0.2); }
+
+/* ── EMPTY ── */
+.empty { text-align:center; padding:48px 24px; color:var(--text3); }
+.empty-icon { font-size:36px; margin-bottom:12px; }
+.empty p { font-size:13px; }
+
+/* ── ALERTS ── */
+.alert-box { padding:14px 18px; border-radius:var(--radius); font-size:12px; line-height:1.6; margin:14px 0; font-family:var(--mono); }
+.alert-gold { background:var(--gold-dim); border:1px solid rgba(212,168,67,0.25); color:var(--gold); }
+.alert-green { background:var(--green-dim); border:1px solid rgba(45,212,160,0.25); color:var(--green); }
+.alert-red { background:var(--red-dim); border:1px solid rgba(240,85,85,0.25); color:var(--red); }
+.alert-blue { background:rgba(91,138,245,0.08); border:1px solid rgba(91,138,245,0.2); color:var(--blue); }
+
+/* ── DARF ── */
+.darf-panel { background:linear-gradient(135deg,rgba(212,168,67,0.07),rgba(212,168,67,0.02)); border:1px solid rgba(212,168,67,0.25); border-radius:var(--radius); padding:22px 24px; margin-top:20px; }
+.darf-panel h3 { font-family:var(--display); font-size:15px; font-weight:700; color:var(--gold); margin-bottom:16px; }
+.darf-line { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(30,32,53,0.8); font-size:12px; font-family:var(--mono); }
+.darf-line:last-child { border-bottom:none; font-size:15px; font-weight:700; padding-top:14px; }
+.darf-line span:first-child { color:var(--text2); }
+
+/* ── MONTH NAV ── */
+.month-nav { display:flex; align-items:center; gap:14px; margin-bottom:24px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 20px; width:fit-content; }
+.month-nav button { background:var(--surface2); border:1px solid var(--border2); color:var(--text2); width:30px; height:30px; border-radius:4px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+.month-nav button:hover { border-color:var(--gold); color:var(--gold); }
+.month-display { font-family:var(--display); font-size:17px; font-weight:700; min-width:180px; text-align:center; }
+
+/* ── COMP ROWS ── */
+.comp-row { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--surface2); border-radius:4px; margin-bottom:8px; font-size:12px; font-family:var(--mono); }
+.comp-label { color:var(--text2); }
+
+/* ── PDF UPLOAD ── */
+.upload-zone { border:2px dashed var(--border2); border-radius:var(--radius); padding:40px 24px; text-align:center; cursor:pointer; transition:all 0.2s; position:relative; }
+.upload-zone:hover, .upload-zone.dragover { border-color:var(--gold); background:var(--gold-dim); }
+.upload-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+.upload-icon { font-size:40px; margin-bottom:12px; }
+.upload-title { font-family:var(--display); font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.upload-sub { font-size:12px; color:var(--text2); font-family:var(--mono); }
+.upload-sub strong { color:var(--gold); }
+
+.ia-section { border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:20px; background:var(--surface); }
+.ia-section-title { font-family:var(--display); font-size:14px; font-weight:700; color:var(--gold); margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+.ia-section-sub { font-size:12px; color:var(--text2); margin-bottom:16px; }
+
+.ia-loading { display:none; align-items:center; gap:10px; color:var(--text2); font-size:12px; font-family:var(--mono); margin-top:12px; }
+.spinner { width:16px; height:16px; border:2px solid var(--border2); border-top-color:var(--gold); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.pdf-progress { margin-top:16px; display:none; }
+.progress-bar-wrap { background:var(--bg); border-radius:20px; height:6px; margin-top:8px; overflow:hidden; }
+.progress-bar { height:100%; background:linear-gradient(90deg,var(--gold),var(--gold2)); border-radius:20px; transition:width 0.3s; }
+
+.preview-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 12px; background:var(--green-dim); border:1px solid rgba(45,212,160,0.2); border-radius:4px; margin-bottom:6px; font-family:var(--mono); font-size:12px; }
+#import-preview-table { display:none; }
+
+/* ── ANNUAL ── */
+.year-month-row { display:grid; grid-template-columns:120px 1fr 1fr 1fr 1fr; gap:12px; align-items:center; padding:10px 14px; border-radius:4px; margin-bottom:4px; font-size:12px; font-family:var(--mono); transition:background 0.15s; }
+.year-month-row:hover { background:var(--surface2); }
+.year-month-row.header { color:var(--text3); font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+
+/* ── TOAST ── */
+.toast { position:fixed; bottom:24px; right:24px; background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius); padding:14px 20px; font-family:var(--mono); font-size:12px; z-index:9999; transform:translateY(80px); opacity:0; transition:all 0.3s; max-width:320px; }
+.toast.show { transform:translateY(0); opacity:1; }
+.toast.toast-ok { border-left:3px solid var(--green); }
+.toast.toast-err { border-left:3px solid var(--red); }
+.toast.toast-info { border-left:3px solid var(--gold); }
+
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text3); }
+
+@media(max-width:900px) {
+  .layout { grid-template-columns:1fr; }
+  .sidebar { height:auto; position:relative; }
+  .main { padding:24px 20px; }
+  .grid-4,.grid-5 { grid-template-columns:1fr 1fr; }
+  .grid-3 { grid-template-columns:1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ TOAST ══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ══ AUTH SCREEN ══ -->
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">APURA</div>
+    <div class="auth-sub">// IR Renda Variável — Acesso Seguro</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
+      <button class="auth-tab" onclick="switchAuthTab('cadastro')">Criar conta</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="auth-login">
+      <div class="auth-field">
+        <label>E-mail</label>
+        <input type="email" id="login-email" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div class="auth-field">
+        <label>Senha</label>
+        <input type="password" id="login-senha" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="auth-btn" id="btn-login" onclick="doLogin()">Entrar →</button>
+      <div class="auth-link" style="margin-top:12px">
+        <span onclick="showReset()">Esqueceu a senha?</span>
+      </div>
+    </div>
+
+    <!-- CADASTRO -->
+    <div id="auth-cadastro" style="display:none">
+      <div class="auth-field">
+        <label>Nome</label>
+        <input type="text" id="cad-nome" placeholder="Seu nome">
+      </div>
+      <div class="auth-field">
+        <label>E-mail</label>
+        <input type="email" id="cad-email" placeholder="seu@email.com">
+      </div>
+      <div class="auth-field">
+        <label>Senha (mín. 6 caracteres)</label>
+        <input type="password" id="cad-senha" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" id="btn-cad" onclick="doCadastro()">Criar conta →</button>
+    </div>
+
+    <!-- RESET -->
+    <div id="auth-reset" style="display:none">
+      <div class="auth-field">
+        <label>E-mail da conta</label>
+        <input type="email" id="reset-email" placeholder="seu@email.com">
+      </div>
+      <button class="auth-btn" onclick="doReset()">Enviar link de recuperação →</button>
+      <div class="auth-link"><span onclick="switchAuthTab('login')">← Voltar ao login</span></div>
+    </div>
+
+    <div class="auth-msg" id="auth-msg"></div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+<div class="layout">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>APURA</h1>
+      <p>// IR Renda Variável</p>
+    </div>
+    <nav>
+      <div class="nav-item active" onclick="navTo('dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
+      <div class="nav-item" onclick="navTo('operacoes')"><span class="nav-icon">⊕</span> Lançar Operações</div>
+      <div class="nav-item" onclick="navTo('importar')"><span class="nav-icon">⚡</span> Importar via IA</div>
+      <div class="nav-item" onclick="navTo('apuracao')"><span class="nav-icon">◎</span> Apuração Mensal</div>
+      <div class="nav-item" onclick="navTo('portfolio')"><span class="nav-icon">▦</span> Portfólio</div>
+      <div class="nav-item" onclick="navTo('anual')"><span class="nav-icon">◷</span> Resumo Anual</div>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="user-badge">
+        <div class="user-avatar" id="user-initials">--</div>
+        <div class="user-info">
+          <p id="user-name-display">Usuário</p>
+          <p id="user-email-display" style="font-size:10px;color:var(--text3);font-family:var(--mono)">—</p>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">↩ sair da conta</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div class="page-title">Dashboard</div>
+        <div class="page-sub">Visão geral das suas operações</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat gold"><div class="stat-label">Operações</div><div class="stat-value c-gold" id="ds-ops">—</div></div>
+        <div class="stat green"><div class="stat-label">Resultado Acumulado</div><div class="stat-value c-green" id="ds-resultado">—</div></div>
+        <div class="stat red"><div class="stat-label">DARF Acumulado</div><div class="stat-value c-red" id="ds-darf">—</div></div>
+        <div class="stat blue"><div class="stat-label">Saldo Prejuízo</div><div class="stat-value c-blue" id="ds-prej">—</div></div>
+      </div>
+      <div id="dash-alert"></div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Últimas Operações</div></div>
+        <div id="dash-recent"><div class="empty"><div class="empty-icon">◈</div><p>Nenhuma operação ainda.</p></div></div>
+      </div>
+    </div>
+
+    <!-- OPERAÇÕES -->
+    <div id="page-operacoes" class="page">
+      <div class="page-header">
+        <div class="page-title">Lançar Operações</div>
+        <div class="page-sub">Registre compras e vendas manualmente</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Nova Operação</div></div>
+        <div class="grid-5" style="margin-bottom:14px">
+          <div class="field"><label>Ticker</label><input type="text" id="op-ticker" placeholder="PETR4" oninput="this.value=this.value.toUpperCase()"></div>
+          <div class="field"><label>Tipo</label>
+            <select id="op-tipo"><option value="acao">Ação</option><option value="fii">FII</option><option value="etf">ETF</option><option value="opcao">Opção</option></select>
+          </div>
+          <div class="field"><label>Operação</label>
+            <select id="op-operacao"><option value="swing">Swing Trade</option><option value="day">Day Trade</option></select>
+          </div>
+          <div class="field"><label>C / V</label>
+            <select id="op-cv"><option value="C">Compra</option><option value="V">Venda</option></select>
+          </div>
+          <div class="field"><label>Data</label><input type="date" id="op-data"></div>
+        </div>
+        <div class="grid-3" style="margin-bottom:20px">
+          <div class="field"><label>Quantidade</label><input type="number" id="op-qtd" placeholder="100" min="1"></div>
+          <div class="field"><label>Preço (R$)</label><input type="number" id="op-preco" placeholder="0,00" step="0.01" min="0"></div>
+          <div class="field"><label>Taxas (R$)</label><input type="number" id="op-taxas" placeholder="0,00" step="0.01" value="0" min="0"></div>
+        </div>
+        <div class="flex-row flex-end">
+          <button class="btn btn-ghost btn-sm" onclick="limparForm()">Limpar</button>
+          <button class="btn btn-gold" id="btn-add-op" onclick="addOperacao()">＋ Adicionar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Todas as Operações</div>
+          <button class="btn btn-ghost btn-sm" onclick="clearAll()" style="color:var(--red)">🗑 Limpar tudo</button>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Data</th><th>Ticker</th><th>Tipo</th><th>Op.</th><th>C/V</th><th>Qtd</th><th>Preço</th><th>Taxas</th><th>Total</th><th></th></tr></thead>
+          <tbody id="tbody-ops"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPORTAR VIA IA -->
+    <div id="page-importar" class="page">
+      <div class="page-header">
+        <div class="page-title">⚡ Importar via IA</div>
+        <div class="page-sub">Faça upload do PDF da nota de corretagem ou cole o texto — a IA interpreta automaticamente</div>
+      </div>
+
+      <div class="ia-section">
+        <div class="ia-section-title">🔑 Chave API Anthropic</div>
+        <div class="ia-section-sub">Sua chave fica salva localmente no navegador. Não é enviada para nenhum servidor além da Anthropic.</div>
+        <div class="field">
+          <input type="password" id="api-key" placeholder="sk-ant-api03-..." oninput="salvarApiKey()">
+        </div>
+      </div>
+
+      <!-- UPLOAD PDF -->
+      <div class="ia-section">
+        <div class="ia-section-title">📄 Upload de PDF</div>
+        <div class="ia-section-sub">Faça upload direto da nota de corretagem em PDF. O sistema extrai o texto e envia para a IA interpretar.</div>
+
+        <div class="upload-zone" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+          <input type="file" accept=".pdf" onchange="handleFileSelect(event)">
+          <div class="upload-icon">📂</div>
+          <div class="upload-title">Arraste o PDF aqui ou clique para selecionar</div>
+          <div class="upload-sub">Suporta notas da <strong>XP, BTG, Clear, Rico, Nubank Invest</strong> e outras</div>
+        </div>
+
+        <div class="pdf-progress" id="pdf-progress">
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text2)" id="pdf-status">Lendo PDF...</div>
+          <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+        </div>
+
+        <div class="ia-loading" id="ia-loading-pdf">
+          <div class="spinner"></div>
+          <span>Analisando nota com Claude IA... aguarde</span>
+        </div>
+      </div>
+
+      <!-- TEXTO MANUAL -->
+      <div class="ia-section">
+        <div class="ia-section-title">✏️ Ou cole o texto manualmente</div>
+        <div class="ia-section-sub">Alternativa ao PDF: cole o texto extraído ou descreva as operações em linguagem natural.</div>
+        <div class="field" style="margin-bottom:14px">
+          <textarea id="ia-texto" placeholder="Exemplo:
+15/04/2024 - Compra 200 PETR4 @ R$ 38,75 - corretagem R$ 9,90
+15/04/2024 - Venda 100 VALE3 @ R$ 67,20 - corretagem R$ 9,90
+22/04/2024 - Compra 50 MXRF11 @ R$ 10,15
+22/04/2024 - Venda 300 BBAS3 @ R$ 27,50 day trade - corretagem R$ 9,90"></textarea>
+        </div>
+        <div class="flex-row">
+          <button class="btn btn-gold" onclick="importarViaTexto()">⚡ Interpretar texto</button>
+          <button class="btn btn-ghost btn-sm" onclick="usarExemplo()">Usar exemplo</button>
+        </div>
+        <div class="ia-loading" id="ia-loading-texto">
+          <div class="spinner"></div>
+          <span>Analisando com Claude... aguarde</span>
+        </div>
+      </div>
+
+      <!-- PREVIEW -->
+      <div id="import-preview-table">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Operações Identificadas</div>
+            <button class="btn btn-green" onclick="confirmarImport()">✓ Confirmar e Salvar Todas</button>
+          </div>
+          <div id="import-preview-rows"></div>
+        </div>
+      </div>
+
+      <div class="alert-box alert-blue">
+        💡 <strong>Dica:</strong> Quanto mais completo o PDF ou texto, mais precisa a extração. Você sempre pode revisar e editar antes de confirmar.
+      </div>
+    </div>
+
+    <!-- APURAÇÃO MENSAL -->
+    <div id="page-apuracao" class="page">
+      <div class="page-header">
+        <div class="page-title">Apuração Mensal</div>
+        <div class="page-sub">DARF, compensação de prejuízos e resultado por ativo</div>
+      </div>
+      <div class="month-nav">
+        <button onclick="changeMonth(-1)">‹</button>
+        <div class="month-display" id="month-display">—</div>
+        <button onclick="changeMonth(1)">›</button>
+      </div>
+      <div id="apuracao-content"></div>
+    </div>
+
+    <!-- PORTFÓLIO -->
+    <div id="page-portfolio" class="page">
+      <div class="page-header">
+        <div class="page-title">Portfólio</div>
+        <div class="page-sub">Custo médio calculado automaticamente</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Posições em Aberto</div></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Ticker</th><th>Tipo</th><th>Qtd</th><th>Custo Médio</th><th>Custo Total</th></tr></thead>
+          <tbody id="tbody-portfolio"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESUMO ANUAL -->
+    <div id="page-anual" class="page">
+      <div class="page-header">
+        <div class="page-title">Resumo Anual</div>
+        <div class="page-sub">Consolidado para declaração de IRPF — Ficha Renda Variável</div>
+      </div>
+      <div id="anual-content"></div>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<script>
+// ══ SUPABASE CONFIG ══
+const SUPABASE_URL = 'https://cmivtxjrtdkwfllgbqzu.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtaXZ0eGpydGRrd2ZsbGdicXp1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNzI1MTEsImV4cCI6MjA5MzY0ODUxMX0.UaeiOlaxs0gOUsBtNOSgK3DhqV2Rof3f-hiOJvDXYHk';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ══ STATE ══
+let operacoes = [];
+let currentUser = null;
+let currentMonth = new Date().getMonth();
+let currentYear = new Date().getFullYear();
+let pendingImport = [];
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+// ══ UTILS ══
+const fmtBRL = v => v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const tagTipo = t => { const m={acao:'tag-acao',fii:'tag-fii',etf:'tag-etf',opcao:'tag-opcao'}; const l={acao:'Ação',fii:'FII',etf:'ETF',opcao:'Opção'}; return `<span class="tag ${m[t]||'tag-acao'}">${l[t]||t}</span>`; };
+const tagOp = o => `<span class="tag ${o==='day'?'tag-day':'tag-swing'}">${o==='day'?'Day':'Swing'}</span>`;
+const tagCV = c => `<span class="tag ${c==='C'?'tag-c':'tag-v'}">${c}</span>`;
+
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast toast-${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function showMsg(msg, type='error') {
+  const el = document.getElementById('auth-msg');
+  el.textContent = msg;
+  el.className = `auth-msg ${type}`;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display='none', 5000);
+}
+
+// ══ API KEY ══
+function salvarApiKey() { localStorage.setItem('apura_api_key', document.getElementById('api-key').value); }
+function carregarApiKey() { const k = localStorage.getItem('apura_api_key'); if(k) document.getElementById('api-key').value = k; }
+
+// ══ AUTH ══
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i) => t.classList.toggle('active', ['login','cadastro'][i]===tab));
+  document.getElementById('auth-login').style.display = tab==='login'?'block':'none';
+  document.getElementById('auth-cadastro').style.display = tab==='cadastro'?'block':'none';
+  document.getElementById('auth-reset').style.display = 'none';
+}
+
+function showReset() {
+  document.getElementById('auth-login').style.display = 'none';
+  document.getElementById('auth-reset').style.display = 'block';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const senha = document.getElementById('login-senha').value;
+  if(!email || !senha) { showMsg('Preencha e-mail e senha.'); return; }
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+  btn.disabled = false; btn.textContent = 'Entrar →';
+  if(error) showMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
+}
+
+async function doCadastro() {
+  const nome = document.getElementById('cad-nome').value.trim();
+  const email = document.getElementById('cad-email').value.trim();
+  const senha = document.getElementById('cad-senha').value;
+  if(!nome || !email || !senha) { showMsg('Preencha todos os campos.'); return; }
+  if(senha.length < 6) { showMsg('Senha deve ter pelo menos 6 caracteres.'); return; }
+  const btn = document.getElementById('btn-cad');
+  btn.disabled = true; btn.textContent = 'Criando conta...';
+  const { error } = await sb.auth.signUp({ email, password: senha, options: { data: { nome } } });
+  btn.disabled = false; btn.textContent = 'Criar conta →';
+  if(error) showMsg(error.message);
+  else showMsg('Conta criada! Verifique seu e-mail para confirmar.', 'success');
+}
+
+async function doReset() {
+  const email = document.getElementById('reset-email').value.trim();
+  if(!email) { showMsg('Informe seu e-mail.'); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+  if(error) showMsg(error.message);
+  else showMsg('Link de recuperação enviado para ' + email, 'success');
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  operacoes = [];
+  currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ══ SESSION LISTENER ══
+sb.auth.onAuthStateChange(async (event, session) => {
+  if(session?.user) {
+    currentUser = session.user;
+    await entrarNoApp();
+  } else {
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+async function entrarNoApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const nome = currentUser.user_metadata?.nome || currentUser.email.split('@')[0];
+  const initials = nome.substring(0,2).toUpperCase();
+  document.getElementById('user-initials').textContent = initials;
+  document.getElementById('user-name-display').textContent = nome.charAt(0).toUpperCase()+nome.slice(1);
+  document.getElementById('user-email-display').textContent = currentUser.email;
+  carregarApiKey();
+  await carregarOperacoes();
+  updateMonthDisplay();
+  updateDashboard();
+}
+
+// ══ SUPABASE CRUD ══
+async function carregarOperacoes() {
+  const { data, error } = await sb.from('operacoes').select('*').order('data', {ascending:true});
+  if(error) { toast('Erro ao carregar operações: '+error.message, 'err'); return; }
+  operacoes = (data||[]).map(r => ({
+    id: r.id,
+    ticker: r.ticker,
+    tipo: r.tipo,
+    operacao: r.operacao,
+    data: r.data,
+    cv: r.cv,
+    qtd: parseFloat(r.qtd),
+    preco: parseFloat(r.preco),
+    taxas: parseFloat(r.taxas||0)
+  }));
+  renderTabelaOps();
+}
+
+async function salvarOperacao(op) {
+  const { data, error } = await sb.from('operacoes').insert({
+    user_id: currentUser.id,
+    ticker: op.ticker,
+    tipo: op.tipo,
+    operacao: op.operacao,
+    data: op.data,
+    cv: op.cv,
+    qtd: op.qtd,
+    preco: op.preco,
+    taxas: op.taxas
+  }).select().single();
+  if(error) { toast('Erro ao salvar: '+error.message, 'err'); return null; }
+  return data;
+}
+
+async function deletarOperacao(id) {
+  const { error } = await sb.from('operacoes').delete().eq('id', id);
+  if(error) { toast('Erro ao deletar: '+error.message, 'err'); return false; }
+  return true;
+}
+
+async function limparTodasOperacoes() {
+  const { error } = await sb.from('operacoes').delete().eq('user_id', currentUser.id);
+  if(error) { toast('Erro ao limpar: '+error.message, 'err'); return false; }
+  return true;
+}
+
+// ══ NAV ══
+function navTo(page) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  const pages = ['dashboard','operacoes','importar','apuracao','portfolio','anual'];
+  document.querySelectorAll('.nav-item')[pages.indexOf(page)].classList.add('active');
+  document.getElementById('page-'+page).classList.add('active');
+  if(page==='dashboard') updateDashboard();
+  if(page==='apuracao') { updateMonthDisplay(); renderApuracao(); }
+  if(page==='portfolio') renderPortfolio();
+  if(page==='anual') renderAnual();
+  if(page==='operacoes') renderTabelaOps();
+}
+
+// ══ LÓGICA DE CÁLCULO ══
+function buildPortfolio(until) {
+  const port = {};
+  const sorted = [...operacoes].sort((a,b)=>a.data.localeCompare(b.data));
+  sorted.filter(op=>!until||op.data<until).forEach(op=>{
+    if(!port[op.ticker]) port[op.ticker]={qtd:0,custoTotal:0,tipo:op.tipo};
+    const p=port[op.ticker];
+    if(op.cv==='C'){p.custoTotal+=op.qtd*op.preco+op.taxas;p.qtd+=op.qtd;}
+    else{const cm=p.qtd>0?p.custoTotal/p.qtd:0;p.custoTotal-=cm*Math.min(op.qtd,p.qtd);p.qtd=Math.max(0,p.qtd-op.qtd);}
+    p.custoMedio=p.qtd>0?p.custoTotal/p.qtd:0;p.tipo=op.tipo;
+  });
+  return port;
+}
+
+function apurarMes(prefix,portAntes,opsDoMes,saldosPrej,aplicarComp) {
+  const port=JSON.parse(JSON.stringify(portAntes));
+  const resultadosPorTicker={};
+  let totalVendasSwingAcao=0;
+  const cats={swing_acao:0,swing_fii:0,swing_etf:0,swing_opcao:0,day:0};
+  opsDoMes.sort((a,b)=>a.data.localeCompare(b.data)).forEach(op=>{
+    if(!port[op.ticker]) port[op.ticker]={qtd:0,custoTotal:0,tipo:op.tipo};
+    const p=port[op.ticker];
+    if(op.cv==='C'){p.custoTotal+=op.qtd*op.preco+op.taxas;p.qtd+=op.qtd;p.tipo=op.tipo;}
+    else{
+      const cm=p.qtd>0?p.custoTotal/p.qtd:op.preco;
+      const resultado=(op.preco-cm)*op.qtd-op.taxas;
+      if(!resultadosPorTicker[op.ticker]) resultadosPorTicker[op.ticker]={resultado:0,tipo:op.tipo,operacao:op.operacao,receita:0};
+      resultadosPorTicker[op.ticker].resultado+=resultado;
+      resultadosPorTicker[op.ticker].receita+=op.qtd*op.preco;
+      if(op.tipo==='acao'&&op.operacao==='swing') totalVendasSwingAcao+=op.qtd*op.preco;
+      const cat=op.operacao==='day'?'day':`swing_${op.tipo}`;
+      cats[cat]=(cats[cat]||0)+resultado;
+      const cm2=p.qtd>0?p.custoTotal/p.qtd:0;
+      p.custoTotal-=cm2*Math.min(op.qtd,p.qtd);p.qtd=Math.max(0,p.qtd-op.qtd);
+    }
+    p.custoMedio=p.qtd>0?p.custoTotal/p.qtd:0;
+  });
+  const isentoSwingAcao=totalVendasSwingAcao<=20000&&totalVendasSwingAcao>0;
+  const comp=aplicarComp?saldosPrej:{swing_acao:0,swing_fii:0,swing_etf:0,swing_opcao:0,day:0};
+  const calcIR=(cat,aliq,isento)=>{
+    if(isento) return{ir:0,baseUsada:0,compUsada:0};
+    const base=cats[cat]||0;const saldo=comp[cat]||0;
+    const compUsada=saldo<0?Math.min(-saldo,Math.max(0,base)):0;
+    const baseIR=Math.max(0,base+saldo);
+    return{ir:baseIR*aliq,baseUsada:baseIR,compUsada};
+  };
+  const irSwingAcao=calcIR('swing_acao',0.15,isentoSwingAcao);
+  const irSwingFII=calcIR('swing_fii',0.20,false);
+  const irSwingETF=calcIR('swing_etf',0.15,false);
+  const irSwingOpcao=calcIR('swing_opcao',0.15,false);
+  const irDay=calcIR('day',0.20,false);
+  let irFonte=0;
+  Object.values(resultadosPorTicker).forEach(r=>{irFonte+=r.receita*(r.operacao==='day'?0.01:0.00005);});
+  const irTotal=irSwingAcao.ir+irSwingFII.ir+irSwingETF.ir+irSwingOpcao.ir+irDay.ir;
+  const irRetido=Math.min(irFonte,irTotal);
+  const darf=Math.max(0,irTotal-irRetido);
+  return{resultadosPorTicker,resultados:cats,totalVendasSwingAcao,isentoSwingAcao,irSwingAcao,irSwingFII,irSwingETF,irSwingOpcao,irDay,irTotal,irRetido,darf,compensacoes:{swing_acao:irSwingAcao.compUsada,swing_fii:irSwingFII.compUsada,swing_etf:irSwingETF.compUsada,swing_opcao:irSwingOpcao.compUsada,day:irDay.compUsada}};
+}
+
+function calcSaldosPrej(atePrefix) {
+  const saldos={swing_acao:0,swing_fii:0,swing_etf:0,swing_opcao:0,day:0};
+  const allMonths=[...new Set(operacoes.map(op=>op.data.substring(0,7)))].sort();
+  for(const m of allMonths){
+    if(m>=atePrefix) break;
+    const opsM=operacoes.filter(op=>op.data.startsWith(m));
+    const portM=buildPortfolio(m);
+    const r=apurarMes(m,portM,opsM,saldos,true);
+    for(const cat of Object.keys(saldos)){
+      const res=r.resultados[cat]||0;
+      const comp=r.compensacoes[cat]||0;
+      saldos[cat]=Math.min(0,saldos[cat]+comp);
+      if(res<0) saldos[cat]+=res;
+    }
+  }
+  return saldos;
+}
+
+// ══ DASHBOARD ══
+function updateDashboard() {
+  const sorted=[...operacoes].sort((a,b)=>b.data.localeCompare(a.data));
+  document.getElementById('ds-ops').textContent=operacoes.length;
+  let totalResultado=0,totalDarf=0;
+  const allMonths=[...new Set(operacoes.map(op=>op.data.substring(0,7)))].sort();
+  const saldos={swing_acao:0,swing_fii:0,swing_etf:0,swing_opcao:0,day:0};
+  allMonths.forEach(m=>{
+    const opsM=operacoes.filter(op=>op.data.startsWith(m));
+    const portM=buildPortfolio(m);
+    const r=apurarMes(m,portM,opsM,saldos,true);
+    Object.values(r.resultados).forEach(v=>totalResultado+=v);
+    totalDarf+=r.darf;
+    for(const cat of Object.keys(saldos)){
+      const res=r.resultados[cat]||0;const comp=r.compensacoes[cat]||0;
+      saldos[cat]=Math.min(0,saldos[cat]+comp);
+      if(res<0) saldos[cat]+=res;
+    }
+  });
+  const saldoTotal=Object.values(saldos).reduce((s,v)=>s+v,0);
+  const dsRes=document.getElementById('ds-resultado');
+  dsRes.textContent=fmtBRL(totalResultado);
+  dsRes.className='stat-value '+(totalResultado>=0?'c-green':'c-red');
+  document.getElementById('ds-darf').textContent=fmtBRL(totalDarf);
+  document.getElementById('ds-prej').textContent=fmtBRL(Math.abs(saldoTotal));
+  const alertDiv=document.getElementById('dash-alert');
+  alertDiv.innerHTML=saldoTotal<-0.01?`<div class="alert-box alert-blue" style="margin-bottom:16px">💡 Você tem <strong>${fmtBRL(Math.abs(saldoTotal))}</strong> de saldo de prejuízo acumulado para compensar em meses futuros.</div>`:'';
+  const el=document.getElementById('dash-recent');
+  if(!sorted.length){el.innerHTML='<div class="empty"><div class="empty-icon">◈</div><p>Nenhuma operação ainda.</p></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>Data</th><th>Ticker</th><th>Tipo</th><th>Op.</th><th>C/V</th><th>Qtd</th><th>Preço</th><th>Total</th></tr></thead><tbody>${
+    sorted.slice(0,8).map(op=>{
+      const total=op.cv==='C'?op.qtd*op.preco+op.taxas:op.qtd*op.preco-op.taxas;
+      return `<tr><td>${op.data.split('-').reverse().join('/')}</td><td><strong>${op.ticker}</strong></td><td>${tagTipo(op.tipo)}</td><td>${tagOp(op.operacao)}</td><td>${tagCV(op.cv)}</td><td>${op.qtd.toLocaleString('pt-BR')}</td><td>${fmtBRL(op.preco)}</td><td style="color:${op.cv==='C'?'var(--red)':'var(--green)'}">${op.cv==='C'?'-':'+'}${fmtBRL(Math.abs(total))}</td></tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+// ══ OPERAÇÕES ══
+async function addOperacao() {
+  const ticker=document.getElementById('op-ticker').value.trim().toUpperCase();
+  const tipo=document.getElementById('op-tipo').value;
+  const operacao=document.getElementById('op-operacao').value;
+  const data=document.getElementById('op-data').value;
+  const cv=document.getElementById('op-cv').value;
+  const qtd=parseFloat(document.getElementById('op-qtd').value);
+  const preco=parseFloat(document.getElementById('op-preco').value);
+  const taxas=parseFloat(document.getElementById('op-taxas').value)||0;
+  if(!ticker||!data||!qtd||!preco){toast('Preencha todos os campos obrigatórios.','err');return;}
+  const btn=document.getElementById('btn-add-op');
+  btn.disabled=true; btn.textContent='Salvando...';
+  const saved=await salvarOperacao({ticker,tipo,operacao,data,cv,qtd,preco,taxas});
+  btn.disabled=false; btn.textContent='＋ Adicionar';
+  if(saved){
+    operacoes.push({id:saved.id,ticker,tipo,operacao,data,cv,qtd,preco,taxas});
+    renderTabelaOps();limparForm();
+    toast(`${cv==='C'?'Compra':'Venda'} de ${ticker} salva!`,'ok');
+  }
+}
+
+async function removeOp(id) {
+  if(!confirm('Remover esta operação?')) return;
+  const ok=await deletarOperacao(id);
+  if(ok){operacoes=operacoes.filter(o=>o.id!==id);renderTabelaOps();toast('Operação removida.','ok');}
+}
+
+async function clearAll() {
+  if(!confirm('Limpar TODAS as operações? Esta ação não pode ser desfeita.')) return;
+  const ok=await limparTodasOperacoes();
+  if(ok){operacoes=[];renderTabelaOps();toast('Todas as operações removidas.','ok');}
+}
+
+function limparForm() {
+  ['op-ticker','op-qtd','op-preco'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('op-taxas').value='0';
+  document.getElementById('op-data').value=new Date().toISOString().split('T')[0];
+  document.getElementById('op-cv').value='C';
+}
+
+function renderTabelaOps() {
+  const tbody=document.getElementById('tbody-ops');
+  if(!operacoes.length){tbody.innerHTML='<tr><td colspan="10"><div class="empty"><div class="empty-icon">⊕</div><p>Nenhuma operação lançada.</p></div></td></tr>';return;}
+  const sorted=[...operacoes].sort((a,b)=>b.data.localeCompare(a.data));
+  tbody.innerHTML=sorted.map(op=>{
+    const total=op.cv==='C'?op.qtd*op.preco+op.taxas:op.qtd*op.preco-op.taxas;
+    return `<tr><td>${op.data.split('-').reverse().join('/')}</td><td><strong>${op.ticker}</strong></td><td>${tagTipo(op.tipo)}</td><td>${tagOp(op.operacao)}</td><td>${tagCV(op.cv)}</td><td>${op.qtd.toLocaleString('pt-BR')}</td><td>${fmtBRL(op.preco)}</td><td style="color:var(--text3)">${fmtBRL(op.taxas)}</td><td style="color:${op.cv==='C'?'var(--red)':'var(--green)'}">${op.cv==='C'?'-':'+'}${fmtBRL(Math.abs(total))}</td><td><button class="btn btn-red" onclick="removeOp('${op.id}')">✕</button></td></tr>`;
+  }).join('');
+}
+
+// ══ PDF UPLOAD ══
+function dragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('dragover'); }
+function dragLeave(e) { document.getElementById('upload-zone').classList.remove('dragover'); }
+function dropFile(e) { e.preventDefault(); dragLeave(e); const f=e.dataTransfer.files[0]; if(f&&f.type==='application/pdf') processarPDF(f); else toast('Selecione um arquivo PDF.','err'); }
+function handleFileSelect(e) { const f=e.target.files[0]; if(f) processarPDF(f); }
+
+async function processarPDF(file) {
+  const apiKey=document.getElementById('api-key').value.trim();
+  if(!apiKey){toast('Insira sua chave de API Anthropic primeiro.','err');return;}
+
+  const prog=document.getElementById('pdf-progress');
+  const status=document.getElementById('pdf-status');
+  const bar=document.getElementById('progress-bar');
+  const loading=document.getElementById('ia-loading-pdf');
+
+  prog.style.display='block'; bar.style.width='10%'; status.textContent=`Lendo ${file.name}...`;
+
+  try {
+    const arrayBuffer=await file.arrayBuffer();
+    bar.style.width='30%'; status.textContent='Extraindo texto das páginas...';
+
+    const pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+    let textoCompleto='';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      textoCompleto+=content.items.map(item=>item.str).join(' ')+'\n';
+      bar.style.width=`${30+((i/pdf.numPages)*40)}%`;
+      status.textContent=`Página ${i} de ${pdf.numPages}...`;
+    }
+
+    bar.style.width='75%'; status.textContent='Enviando para análise da IA...';
+    prog.style.display='none';
+    loading.style.display='flex';
+
+    await interpretarComIA(textoCompleto, apiKey);
+
+  } catch(e) {
+    prog.style.display='none';
+    loading.style.display='none';
+    toast('Erro ao ler PDF: '+e.message,'err');
+  }
+}
+
+// ══ IA IMPORT ══
+function usarExemplo() {
+  document.getElementById('ia-texto').value=`NOTA DE CORRETAGEM - XP INVESTIMENTOS
+Data: 15/04/2024
+C  PETR4  200  38,75  Corretagem: 9,90
+V  VALE3  100  67,20  Corretagem: 9,90
+C  MXRF11  50  10,15  Corretagem: 0,00
+Data: 22/04/2024
+C  BBAS3  300  26,80  Corretagem: 9,90
+V  BBAS3  300  27,50  Day Trade  Corretagem: 9,90`;
+}
+
+async function importarViaTexto() {
+  const apiKey=document.getElementById('api-key').value.trim();
+  const texto=document.getElementById('ia-texto').value.trim();
+  if(!apiKey){toast('Insira sua chave de API Anthropic.','err');return;}
+  if(!texto){toast('Cole o texto da nota de corretagem.','err');return;}
+  const loading=document.getElementById('ia-loading-texto');
+  loading.style.display='flex';
+  await interpretarComIA(texto, apiKey);
+  loading.style.display='none';
+}
+
+async function interpretarComIA(texto, apiKey) {
+  const prompt=`Você é especialista em notas de corretagem brasileiras.
+Analise o texto e extraia TODAS as operações de compra e venda.
+
+Retorne APENAS um array JSON com este formato exato:
+[{"ticker":"PETR4","tipo":"acao","operacao":"swing","data":"2024-04-15","cv":"C","qtd":200,"preco":38.75,"taxas":9.90}]
+
+Regras:
+- tipo: "acao" para ações, "fii" para FIIs (geralmente terminam em 11), "etf", "opcao"
+- operacao: "day" se compra+venda no mesmo dia do mesmo ativo, "swing" nos demais
+- data: YYYY-MM-DD
+- cv: "C" compra, "V" venda
+- taxas: corretagem + emolumentos + outras taxas (0 se não encontrar)
+- Retorne APENAS o JSON, sem texto adicional, sem markdown
+
+Texto:
+${texto}`;
+
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+    });
+    document.getElementById('ia-loading-pdf').style.display='none';
+    document.getElementById('ia-loading-texto').style.display='none';
+
+    const data=await res.json();
+    if(!res.ok){toast('Erro da API: '+(data.error?.message||'desconhecido'),'err');return;}
+
+    const text=data.content.map(b=>b.text||'').join('');
+    let ops;
+    try{ops=JSON.parse(text.replace(/```json|```/g,'').trim());}
+    catch(e){toast('Não foi possível interpretar o retorno da IA. Tente reformatar o texto.','err');return;}
+
+    pendingImport=ops;
+    renderImportPreview(ops);
+
+  } catch(e) {
+    document.getElementById('ia-loading-pdf').style.display='none';
+    document.getElementById('ia-loading-texto').style.display='none';
+    toast('Erro de conexão: '+e.message,'err');
+  }
+}
+
+function renderImportPreview(ops) {
+  const preview=document.getElementById('import-preview-rows');
+  const table=document.getElementById('import-preview-table');
+  if(!ops.length){preview.innerHTML='<div class="alert-box alert-red">Nenhuma operação identificada. Verifique o texto ou PDF.</div>';table.style.display='block';return;}
+  preview.innerHTML=ops.map(op=>`
+    <div class="preview-row">
+      <span style="color:var(--text3);min-width:100px">${op.data.split('-').reverse().join('/')}</span>
+      <strong style="min-width:70px">${op.ticker}</strong>
+      ${tagTipo(op.tipo)} ${tagOp(op.operacao)} ${tagCV(op.cv)}
+      <span>${op.qtd}x</span>
+      <span>${fmtBRL(op.preco)}</span>
+      <span style="color:var(--text3)">taxa: ${fmtBRL(op.taxas)}</span>
+    </div>`).join('');
+  table.style.display='block';
+}
+
+async function confirmarImport() {
+  if(!pendingImport.length) return;
+  const btn=document.querySelector('#import-preview-table .btn-green');
+  btn.disabled=true; btn.textContent='Salvando...';
+  let salvos=0;
+  for(const op of pendingImport){
+    const saved=await salvarOperacao(op);
+    if(saved){operacoes.push({id:saved.id,...op});salvos++;}
+  }
+  btn.disabled=false; btn.textContent='✓ Confirmar e Salvar Todas';
+  pendingImport=[];
+  document.getElementById('import-preview-table').style.display='none';
+  document.getElementById('ia-texto').value='';
+  renderTabelaOps();
+  toast(`${salvos} operações importadas com sucesso!`,'ok');
+  navTo('operacoes');
+}
+
+// ══ APURAÇÃO MENSAL ══
+function updateMonthDisplay(){document.getElementById('month-display').textContent=`${MESES[currentMonth]}  ${currentYear}`;}
+function changeMonth(delta){
+  currentMonth+=delta;
+  if(currentMonth>11){currentMonth=0;currentYear++;}
+  if(currentMonth<0){currentMonth=11;currentYear--;}
+  updateMonthDisplay();renderApuracao();
+}
+
+function renderApuracao() {
+  const prefix=`${currentYear}-${(currentMonth+1).toString().padStart(2,'0')}`;
+  const opsDoMes=operacoes.filter(op=>op.data.startsWith(prefix));
+  const content=document.getElementById('apuracao-content');
+  if(!opsDoMes.length){content.innerHTML='<div class="empty"><div class="empty-icon">◎</div><p>Nenhuma operação neste mês.</p></div>';return;}
+  const saldosPrej=calcSaldosPrej(prefix);
+  const portAntes=buildPortfolio(prefix);
+  const r=apurarMes(prefix,portAntes,opsDoMes,saldosPrej,true);
+  const rows=Object.entries(r.resultadosPorTicker).map(([ticker,v])=>`<tr><td><strong>${ticker}</strong></td><td>${tagTipo(v.tipo)}</td><td>${tagOp(v.operacao)}</td><td>${fmtBRL(v.receita)}</td><td style="color:${v.resultado>=0?'var(--green)':'var(--red)'}">${fmtBRL(v.resultado)}</td></tr>`).join('');
+  const compTotal=Object.values(r.compensacoes).reduce((s,v)=>s+v,0);
+  const compHtml=compTotal>0.01?`<div class="alert-box alert-blue" style="margin-bottom:16px">✅ <strong>Compensação de prejuízo aplicada:</strong> ${fmtBRL(compTotal)} deduzidos da base de cálculo.</div>`:'';
+  const saldoRestante=Object.entries(saldosPrej).map(([cat,v])=>{
+    if(v>=0) return null;
+    const label={swing_acao:'Ações (Swing)',swing_fii:'FIIs',swing_etf:'ETFs',swing_opcao:'Opções',day:'Day Trade'}[cat];
+    return `<div class="comp-row"><span class="comp-label">${label}</span><span style="color:var(--blue)">${fmtBRL(Math.abs(v))}</span></div>`;
+  }).filter(Boolean).join('');
+  const saldoHtml=saldoRestante?`<div class="card"><div class="card-header"><div class="card-title">Saldo de Prejuízo Acumulado</div></div>${saldoRestante}<div class="alert-box alert-blue" style="margin-top:12px">Estes valores serão compensados automaticamente em meses futuros com lucro na mesma categoria.</div></div>`:'';
+  const isentoNote=r.isentoSwingAcao&&r.totalVendasSwingAcao>0?`<div class="alert-box alert-green">✅ <strong>Isenção aplicada:</strong> Vendas de ações swing = ${fmtBRL(r.totalVendasSwingAcao)} — abaixo de R$ 20.000,00.</div>`:'';
+  const darfHtml=r.darf>0.01?`<div class="darf-panel"><h3>🔴 DARF a Recolher — Código 6015</h3>
+    ${r.irSwingAcao.ir>0?`<div class="darf-line"><span>Ações Swing Trade (15%)</span><span>${fmtBRL(r.irSwingAcao.ir)}</span></div>`:''}
+    ${r.irSwingFII.ir>0?`<div class="darf-line"><span>FIIs (20%)</span><span>${fmtBRL(r.irSwingFII.ir)}</span></div>`:''}
+    ${r.irSwingETF.ir>0?`<div class="darf-line"><span>ETFs (15%)</span><span>${fmtBRL(r.irSwingETF.ir)}</span></div>`:''}
+    ${r.irSwingOpcao.ir>0?`<div class="darf-line"><span>Opções Swing (15%)</span><span>${fmtBRL(r.irSwingOpcao.ir)}</span></div>`:''}
+    ${r.irDay.ir>0?`<div class="darf-line"><span>Day Trade (20%)</span><span>${fmtBRL(r.irDay.ir)}</span></div>`:''}
+    ${r.irRetido>0?`<div class="darf-line"><span>IR Retido na Fonte (−)</span><span style="color:var(--red)">− ${fmtBRL(r.irRetido)}</span></div>`:''}
+    <div class="darf-line"><span>DARF LÍQUIDO A PAGAR</span><span style="color:var(--gold)">${fmtBRL(r.darf)}</span></div>
+    </div><div class="alert-box alert-red" style="margin-top:12px">⚠️ Vencimento: último dia útil de ${MESES[currentMonth===11?0:currentMonth+1]}/${currentMonth===11?currentYear+1:currentYear}.</div>`
+    :`<div class="alert-box alert-green">✅ Nenhum DARF a recolher neste mês.${r.isentoSwingAcao&&r.totalVendasSwingAcao>0?' Vendas abaixo de R$ 20.000 — isento.':''}</div>`;
+  const sw=(r.resultados.swing_acao||0)+(r.resultados.swing_fii||0)+(r.resultados.swing_etf||0)+(r.resultados.swing_opcao||0);
+  content.innerHTML=`
+    <div class="stats-row">
+      <div class="stat ${sw>=0?'green':'red'}"><div class="stat-label">Resultado Swing</div><div class="stat-value ${sw>=0?'c-green':'c-red'}">${fmtBRL(sw)}</div></div>
+      <div class="stat ${(r.resultados.day||0)>=0?'green':'red'}"><div class="stat-label">Resultado Day Trade</div><div class="stat-value ${(r.resultados.day||0)>=0?'c-green':'c-red'}">${fmtBRL(r.resultados.day||0)}</div></div>
+      <div class="stat gold"><div class="stat-label">IR Calculado</div><div class="stat-value c-gold">${fmtBRL(r.irTotal)}</div></div>
+      <div class="stat ${r.darf>0?'red':'green'}"><div class="stat-label">DARF a Pagar</div><div class="stat-value ${r.darf>0?'c-red':'c-green'}">${fmtBRL(r.darf)}</div></div>
+    </div>
+    ${compHtml}${saldoHtml}
+    <div class="card"><div class="card-header"><div class="card-title">Vendas do Mês</div></div>
+    ${isentoNote}<div class="table-wrap" style="margin-top:${isentoNote?'12px':'0'}">
+    <table><thead><tr><th>Ticker</th><th>Tipo</th><th>Operação</th><th>Receita</th><th>Resultado</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>
+    ${darfHtml}`;
+}
+
+// ══ PORTFÓLIO ══
+function renderPortfolio() {
+  const port=buildPortfolio();
+  const tbody=document.getElementById('tbody-portfolio');
+  const posicoes=Object.entries(port).filter(([,v])=>v.qtd>0);
+  if(!posicoes.length){tbody.innerHTML='<tr><td colspan="5"><div class="empty"><div class="empty-icon">▦</div><p>Nenhuma posição em aberto.</p></div></td></tr>';return;}
+  tbody.innerHTML=posicoes.map(([ticker,p])=>`<tr><td><strong>${ticker}</strong></td><td>${tagTipo(p.tipo)}</td><td>${p.qtd.toLocaleString('pt-BR')}</td><td>${fmtBRL(p.custoMedio)}</td><td>${fmtBRL(p.custoTotal)}</td></tr>`).join('');
+}
+
+// ══ RESUMO ANUAL ══
+function renderAnual() {
+  const el=document.getElementById('anual-content');
+  if(!operacoes.length){el.innerHTML='<div class="empty"><div class="empty-icon">◷</div><p>Lance operações para gerar o resumo anual.</p></div>';return;}
+  const ano=currentYear;
+  const saldos={swing_acao:0,swing_fii:0,swing_etf:0,swing_opcao:0,day:0};
+  const ateAno=`${ano}-01`;
+  Object.assign(saldos,calcSaldosPrej(ateAno));
+  const mesesData=[];let totalSwing=0,totalDay=0,totalDarf=0,totalIR=0;
+  for(let m=0;m<12;m++){
+    const prefix=`${ano}-${(m+1).toString().padStart(2,'0')}`;
+    const opsM=operacoes.filter(op=>op.data.startsWith(prefix));
+    if(!opsM.length) continue;
+    const portM=buildPortfolio(prefix);
+    const r=apurarMes(prefix,portM,opsM,saldos,true);
+    const sw=(r.resultados.swing_acao||0)+(r.resultados.swing_fii||0)+(r.resultados.swing_etf||0)+(r.resultados.swing_opcao||0);
+    const dy=r.resultados.day||0;
+    totalSwing+=sw;totalDay+=dy;totalDarf+=r.darf;totalIR+=r.irTotal;
+    mesesData.push({mes:m,sw,dy,darf:r.darf,irTotal:r.irTotal});
+    for(const cat of Object.keys(saldos)){
+      const res=r.resultados[cat]||0;const comp=r.compensacoes[cat]||0;
+      saldos[cat]=Math.min(0,saldos[cat]+comp);if(res<0) saldos[cat]+=res;
+    }
+  }
+  const saldoFinal=Object.values(saldos).reduce((s,v)=>s+v,0);
+  el.innerHTML=`
+    <div class="stats-row">
+      <div class="stat ${totalSwing>=0?'green':'red'}"><div class="stat-label">Resultado Swing ${ano}</div><div class="stat-value ${totalSwing>=0?'c-green':'c-red'}">${fmtBRL(totalSwing)}</div></div>
+      <div class="stat ${totalDay>=0?'green':'red'}"><div class="stat-label">Resultado Day Trade ${ano}</div><div class="stat-value ${totalDay>=0?'c-green':'c-red'}">${fmtBRL(totalDay)}</div></div>
+      <div class="stat gold"><div class="stat-label">IR Apurado Total</div><div class="stat-value c-gold">${fmtBRL(totalIR)}</div></div>
+      <div class="stat red"><div class="stat-label">DARFs Recolhidos</div><div class="stat-value c-red">${fmtBRL(totalDarf)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card"><div class="card-header"><div class="card-title">Mês a Mês — ${ano}</div></div>
+        <div class="year-month-row header"><span>Mês</span><span>Swing</span><span>Day Trade</span><span>IR</span><span>DARF</span></div>
+        ${mesesData.map(d=>`<div class="year-month-row">
+          <span style="color:var(--text2)">${MESES[d.mes].substring(0,3)}</span>
+          <span style="color:${d.sw>=0?'var(--green)':'var(--red)'}">${fmtBRL(d.sw)}</span>
+          <span style="color:${d.dy>=0?'var(--green)':'var(--red)'}">${fmtBRL(d.dy)}</span>
+          <span style="color:var(--gold)">${fmtBRL(d.irTotal)}</span>
+          <span style="color:${d.darf>0?'var(--red)':'var(--text3)'}">${d.darf>0.01?fmtBRL(d.darf):'—'}</span>
+        </div>`).join('')}
+      </div>
+      <div class="card"><div class="card-header"><div class="card-title">Para a Declaração IRPF</div></div>
+        <div class="darf-line"><span>Resultado Swing Líquido</span><span style="color:${totalSwing>=0?'var(--green)':'var(--red)'}">${fmtBRL(totalSwing)}</span></div>
+        <div class="darf-line"><span>Resultado Day Trade Líquido</span><span style="color:${totalDay>=0?'var(--green)':'var(--red)'}">${fmtBRL(totalDay)}</span></div>
+        <div class="darf-line"><span>Total IR Recolhido (DARFs)</span><span>${fmtBRL(totalDarf)}</span></div>
+        ${saldoFinal<-0.01?`<div class="darf-line"><span>Saldo Prejuízo p/ ${ano+1}</span><span style="color:var(--blue)">${fmtBRL(Math.abs(saldoFinal))}</span></div>`:''}
+        <div class="alert-box alert-gold" style="margin-top:16px">📝 <strong>Onde declarar:</strong> IRPF → Renda Variável → Operações Comuns/Day Trade → preencher mês a mês.</div>
+        ${saldoFinal<-0.01?`<div class="alert-box alert-blue" style="margin-top:10px">💡 Saldo de prejuízo de ${fmtBRL(Math.abs(saldoFinal))} carregado automaticamente para ${ano+1}.</div>`:''}
+      </div>
+    </div>`;
+}
+
+// ══ INIT ══
+document.getElementById('op-data').value=new Date().toISOString().split('T')[0];
+</script>
+</body>
+</html>
